@@ -1,0 +1,119 @@
+{{- if .Values.s3Backup.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cron-job.fullname" . }}-s3-backup-script
+  labels:
+    {{- include "cron-job.labels" . | nindent 4 }}
+data:
+  backup.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
+    ARCHIVE_NAME="${BACKUP_PREFIX}-${TIMESTAMP}.tar.gz"
+    LOCAL_ARCHIVE="/tmp/${ARCHIVE_NAME}"
+    WORK_DIR="/tmp/backup"
+
+    echo "=========================================="
+    echo "S3 Backup - ${TIMESTAMP}"
+    echo "=========================================="
+    echo "Bucket: ${S3_BUCKET}"
+    echo "Endpoint: ${S3_ENDPOINT}"
+    echo "Folders: ${BACKUP_FOLDERS}"
+    echo "Archive: s3://${S3_BUCKET}/${ARCHIVE_NAME}"
+    echo "Retention: ${BACKUP_RETENTION_DAYS} days"
+    echo ""
+
+    aws configure set aws_access_key_id "${S3_ACCESS_KEY_ID}"
+    aws configure set aws_secret_access_key "${S3_SECRET_ACCESS_KEY}"
+    aws configure set default.region "${S3_REGION}"
+    aws configure set default.s3.signature_version s3v4
+
+    mkdir -p "${WORK_DIR}"
+    TOTAL_OBJECTS=0
+
+    for FOLDER in ${BACKUP_FOLDERS}; do
+      echo "→ Downloading: ${FOLDER}"
+
+      OBJECT_COUNT=$(aws s3 ls "s3://${S3_BUCKET}/${FOLDER}/" \
+        --endpoint-url="${S3_ENDPOINT}" \
+        --recursive 2>/dev/null | wc -l || echo "0")
+
+      if [ "${OBJECT_COUNT}" -eq "0" ]; then
+        echo "  Skip: empty or not found"
+        continue
+      fi
+
+      echo "  Found: ${OBJECT_COUNT} objects"
+      mkdir -p "${WORK_DIR}/${FOLDER}"
+
+      aws s3 sync "s3://${S3_BUCKET}/${FOLDER}/" "${WORK_DIR}/${FOLDER}/" \
+        --endpoint-url="${S3_ENDPOINT}" \
+        --no-progress \
+        --only-show-errors
+
+      TOTAL_OBJECTS=$((TOTAL_OBJECTS + OBJECT_COUNT))
+      echo "  ✓ Downloaded"
+    done
+
+    if [ "${TOTAL_OBJECTS}" -eq "0" ]; then
+      echo "No data to backup"
+      exit 0
+    fi
+
+    echo ""
+    echo "→ Creating archive: ${ARCHIVE_NAME}"
+    tar -czf "${LOCAL_ARCHIVE}" -C "${WORK_DIR}" . 2>/dev/null
+
+    ARCHIVE_SIZE=$(du -h "${LOCAL_ARCHIVE}" | cut -f1)
+    echo "  Archive size: ${ARCHIVE_SIZE}"
+
+    echo "→ Uploading to S3"
+    aws s3 cp "${LOCAL_ARCHIVE}" "s3://${S3_BUCKET}/${ARCHIVE_NAME}" \
+      --endpoint-url="${S3_ENDPOINT}" \
+      --no-progress \
+      --only-show-errors
+
+    echo "  ✓ Upload complete"
+
+    rm -rf "${WORK_DIR}" "${LOCAL_ARCHIVE}"
+
+    echo ""
+    echo "=========================================="
+    echo "Retention cleanup (>${BACKUP_RETENTION_DAYS} days)"
+    echo "=========================================="
+
+    RETENTION_DATE=$(date -d "${BACKUP_RETENTION_DAYS} days ago" +%Y-%m-%d 2>/dev/null || \
+                     date -v-${BACKUP_RETENTION_DAYS}d +%Y-%m-%d 2>/dev/null)
+    RETENTION_TIMESTAMP="${RETENTION_DATE}_00-00-00"
+
+    BACKUP_FILES=$(aws s3 ls "s3://${S3_BUCKET}/" \
+      --endpoint-url="${S3_ENDPOINT}" 2>/dev/null | \
+      grep "${BACKUP_PREFIX}-" | awk '{print $4}' || echo "")
+
+    if [ -z "${BACKUP_FILES}" ]; then
+      echo "No old backups found"
+    else
+      DELETED=0
+      for FILE in ${BACKUP_FILES}; do
+        FILE_TIMESTAMP=$(echo "${FILE}" | sed "s/${BACKUP_PREFIX}-//;s/.tar.gz//")
+        if [[ "${FILE_TIMESTAMP}" < "${RETENTION_TIMESTAMP}" ]]; then
+          echo "Delete: ${FILE}"
+          aws s3 rm "s3://${S3_BUCKET}/${FILE}" \
+            --endpoint-url="${S3_ENDPOINT}" \
+            --only-show-errors
+          DELETED=$((DELETED + 1))
+        fi
+      done
+
+      if [ "${DELETED}" -eq "0" ]; then
+        echo "No old backups to delete"
+      else
+        echo "✓ Deleted ${DELETED} old backup(s)"
+      fi
+    fi
+
+    echo ""
+    echo "✓ Backup completed - $(date +%Y-%m-%d_%H:%M:%S)"
+{{- end }}

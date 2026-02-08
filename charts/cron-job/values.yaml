@@ -111,3 +111,8 @@ configMap:
 secret:
   enabled: false
   data: {}
+
+# S3 Backup built-in script
+# Automatically creates ConfigMap with backup script and mounts it
+s3Backup:
+  enabled: false

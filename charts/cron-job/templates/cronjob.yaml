@@ -97,8 +97,13 @@ spec:
                 mountPath: /secrets
                 readOnly: true
               {{- end }}
+              {{- if $.Values.s3Backup.enabled }}
+              - name: s3-backup-script
+                mountPath: /scripts
+                readOnly: true
+              {{- end }}
             {{- else }}
-              {{- if or .Values.configMap.enabled .Values.secret.enabled }}
+              {{- if or .Values.configMap.enabled .Values.secret.enabled .Values.s3Backup.enabled }}
             volumeMounts:
               {{- if .Values.configMap.enabled }}
               - name: config
@@ -108,6 +113,11 @@ spec:
               {{- if .Values.secret.enabled }}
               - name: secret
                 mountPath: /secrets
+                readOnly: true
+              {{- end }}
+              {{- if .Values.s3Backup.enabled }}
+              - name: s3-backup-script
+                mountPath: /scripts
                 readOnly: true
               {{- end }}
               {{- end }}
@@ -125,8 +135,14 @@ spec:
               secret:
                 secretName: {{ include "cron-job.secretName" $ }}
             {{- end }}
+            {{- if $.Values.s3Backup.enabled }}
+            - name: s3-backup-script
+              configMap:
+                name: {{ include "cron-job.fullname" $ }}-s3-backup-script
+                defaultMode: 0555
+            {{- end }}
           {{- else }}
-            {{- if or .Values.configMap.enabled .Values.secret.enabled }}
+            {{- if or .Values.configMap.enabled .Values.secret.enabled .Values.s3Backup.enabled }}
           volumes:
             {{- if .Values.configMap.enabled }}
             - name: config
@@ -137,6 +153,12 @@ spec:
             - name: secret
               secret:
                 secretName: {{ include "cron-job.secretName" . }}
+            {{- end }}
+            {{- if .Values.s3Backup.enabled }}
+            - name: s3-backup-script
+              configMap:
+                name: {{ include "cron-job.fullname" . }}-s3-backup-script
+                defaultMode: 0555
             {{- end }}
             {{- end }}
           {{- end }}
