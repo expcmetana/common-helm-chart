@@ -1,0 +1,87 @@
+name: Release Charts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "charts/**/Chart.yaml"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release Helm Charts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.14.0"
+
+      - name: Extract chart version
+        id: chart_version
+        run: |
+          VERSION=$(grep '^version:' charts/cron-job/Chart.yaml | awk '{print $2}')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Chart version: $VERSION"
+
+      - name: Check if release exists
+        id: check_release
+        run: |
+          if git rev-parse "v${{ steps.chart_version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release v${{ steps.chart_version.outputs.version }} already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release v${{ steps.chart_version.outputs.version }} does not exist"
+          fi
+
+      - name: Package Helm chart
+        if: steps.check_release.outputs.exists == 'false'
+        run: |
+          mkdir -p .cr-release-packages
+          helm package charts/cron-job -d .cr-release-packages
+
+      - name: Create GitHub Release
+        if: steps.check_release.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.chart_version.outputs.version }}
+          name: Release v${{ steps.chart_version.outputs.version }}
+          body: |
+            ## Helm Chart Release
+
+            ### cron-job chart v${{ steps.chart_version.outputs.version }}
+
+            **Installation from Git:**
+            ```bash
+            helm install my-cronjob https://github.com/${{ github.repository }}/releases/download/v${{ steps.chart_version.outputs.version }}/cron-job-${{ steps.chart_version.outputs.version }}.tgz
+            ```
+
+            **ArgoCD Application:**
+            ```yaml
+            source:
+              repoURL: https://github.com/${{ github.repository }}.git
+              targetRevision: HEAD
+              path: charts/cron-job
+            ```
+
+            **Changes:**
+            See [CHANGELOG.md](CHANGELOG.md) for details.
+          files: .cr-release-packages/*.tgz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

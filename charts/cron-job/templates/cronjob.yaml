@@ -1,0 +1,154 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "cron-job.fullname" . }}
+  labels:
+    {{- include "cron-job.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronjob.schedule | quote }}
+  {{- with .Values.cronjob.timeZone }}
+  timeZone: {{ . }}
+  {{- end }}
+  concurrencyPolicy: {{ .Values.cronjob.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.cronjob.failedJobsHistoryLimit }}
+  {{- with .Values.cronjob.startingDeadlineSeconds }}
+  startingDeadlineSeconds: {{ . }}
+  {{- end }}
+  suspend: {{ .Values.cronjob.suspend }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "cron-job.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.job.backoffLimit }}
+      backoffLimit: {{ . }}
+      {{- end }}
+      {{- with .Values.job.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ . }}
+      {{- end }}
+      {{- with .Values.job.ttlSecondsAfterFinished }}
+      ttlSecondsAfterFinished: {{ . }}
+      {{- end }}
+      template:
+        metadata:
+          labels:
+            {{- include "cron-job.selectorLabels" . | nindent 12 }}
+            {{- with .Values.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          serviceAccountName: {{ include "cron-job.serviceAccountName" . }}
+          automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          restartPolicy: {{ .Values.cronjob.restartPolicy }}
+          containers:
+          - name: {{ .Chart.Name }}
+            image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+            imagePullPolicy: {{ .Values.image.pullPolicy }}
+            {{- with .Values.command }}
+            command:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .Values.args }}
+            args:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            securityContext:
+              {{- toYaml .Values.securityContext | nindent 14 }}
+            {{- if or .Values.env .Values.envFrom }}
+            {{- with .Values.env }}
+            env:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .Values.envFrom }}
+            envFrom:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- end }}
+            resources:
+              {{- toYaml .Values.resources | nindent 14 }}
+            {{- with .Values.volumeMounts }}
+            volumeMounts:
+              {{- toYaml . | nindent 14 }}
+              {{- if $.Values.configMap.enabled }}
+              - name: config
+                mountPath: /config
+                readOnly: true
+              {{- end }}
+              {{- if $.Values.secret.enabled }}
+              - name: secret
+                mountPath: /secrets
+                readOnly: true
+              {{- end }}
+            {{- else }}
+              {{- if or .Values.configMap.enabled .Values.secret.enabled }}
+            volumeMounts:
+              {{- if .Values.configMap.enabled }}
+              - name: config
+                mountPath: /config
+                readOnly: true
+              {{- end }}
+              {{- if .Values.secret.enabled }}
+              - name: secret
+                mountPath: /secrets
+                readOnly: true
+              {{- end }}
+              {{- end }}
+            {{- end }}
+          {{- with .Values.volumes }}
+          volumes:
+            {{- toYaml . | nindent 12 }}
+            {{- if $.Values.configMap.enabled }}
+            - name: config
+              configMap:
+                name: {{ include "cron-job.configMapName" $ }}
+            {{- end }}
+            {{- if $.Values.secret.enabled }}
+            - name: secret
+              secret:
+                secretName: {{ include "cron-job.secretName" $ }}
+            {{- end }}
+          {{- else }}
+            {{- if or .Values.configMap.enabled .Values.secret.enabled }}
+          volumes:
+            {{- if .Values.configMap.enabled }}
+            - name: config
+              configMap:
+                name: {{ include "cron-job.configMapName" . }}
+            {{- end }}
+            {{- if .Values.secret.enabled }}
+            - name: secret
+              secret:
+                secretName: {{ include "cron-job.secretName" . }}
+            {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

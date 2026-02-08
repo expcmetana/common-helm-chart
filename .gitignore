@@ -1,0 +1,20 @@
+# Helm
+*.tgz
+.cr-release-packages/
+charts/*/charts/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.orig

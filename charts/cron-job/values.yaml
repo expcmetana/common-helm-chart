@@ -1,0 +1,113 @@
+nameOverride: ""
+fullnameOverride: ""
+
+cronjob:
+  schedule: "0 0 * * *" # Daily at midnight
+  timeZone: "Europe/Moscow" # GMT+3 (Moscow Standard Time)
+  # concurrencyPolicy controls how Jobs are handled during concurrent runs:
+  # - Forbid: Do not allow concurrent runs; skip new run if previous is still active (default, safest)
+  # - Allow: Allow multiple Jobs to run concurrently (use with caution)
+  # - Replace: Cancel currently running Job and replace it with a new one
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  startingDeadlineSeconds: 300
+  suspend: false
+  restartPolicy: OnFailure # OnFailure (retry on failure) or Never (no retry)
+
+job:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400 # 24 hours
+
+image:
+  repository: ""
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+
+command: []
+# - /bin/sh
+# - -c
+
+args: []
+# - echo "Hello from CronJob"
+
+# Environment variables - direct values or from ConfigMap/Secret
+env: []
+# - name: LOG_LEVEL
+#   value: "info"
+# - name: ENVIRONMENT
+#   value: "production"
+# - name: DATABASE_URL
+#   valueFrom:
+#     secretKeyRef:
+#       name: db-credentials
+#       key: url
+# - name: API_ENDPOINT
+#   valueFrom:
+#     configMapKeyRef:
+#       name: app-config
+#       key: api_endpoint
+
+# Reference entire ConfigMaps or Secrets as environment variables
+envFrom: []
+# - secretRef:
+#     name: api-env  # All keys from this Secret become env vars
+# - configMapRef:
+#     name: app-settings  # All keys from this ConfigMap become env vars
+# - secretRef:
+#     name: database-credentials
+#     optional: false  # Job fails if Secret doesn't exist (default: false)
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+  automountServiceAccountToken: false
+
+podAnnotations: {}
+
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+volumes: []
+
+volumeMounts: []
+
+configMap:
+  enabled: false
+  data: {}
+
+secret:
+  enabled: false
+  data: {}
