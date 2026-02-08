@@ -11,9 +11,37 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Release Helm Charts
+  detect-charts:
+    name: Detect Changed Charts
     runs-on: ubuntu-latest
+    outputs:
+      charts: ${{ steps.changed_charts.outputs.charts }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed charts
+        id: changed_charts
+        run: |
+          # Get changed files in the push
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+
+          # Extract unique chart directories that have Chart.yaml changes
+          CHARTS=$(echo "$CHANGED_FILES" | grep '^charts/.*/Chart.yaml$' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
+
+          echo "charts=$CHARTS" >> $GITHUB_OUTPUT
+          echo "Changed charts: $CHARTS"
+
+  release:
+    name: Release ${{ matrix.chart }}
+    runs-on: ubuntu-latest
+    needs: detect-charts
+    if: needs.detect-charts.outputs.charts != '[]'
+    strategy:
+      matrix:
+        chart: ${{ fromJson(needs.detect-charts.outputs.charts) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -30,44 +58,47 @@ jobs:
         with:
           version: "v3.14.0"
 
-      - name: Extract chart version
-        id: chart_version
+      - name: Extract chart metadata
+        id: chart_meta
         run: |
-          VERSION=$(grep '^version:' charts/cron-job/Chart.yaml | awk '{print $2}')
+          CHART_NAME=$(grep '^name:' charts/${{ matrix.chart }}/Chart.yaml | awk '{print $2}')
+          VERSION=$(grep '^version:' charts/${{ matrix.chart }}/Chart.yaml | awk '{print $2}')
+          echo "name=$CHART_NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Chart version: $VERSION"
+          echo "Chart: $CHART_NAME version: $VERSION"
 
       - name: Check if release exists
         id: check_release
         run: |
-          if git rev-parse "v${{ steps.chart_version.outputs.version }}" >/dev/null 2>&1; then
+          TAG="${{ steps.chart_meta.outputs.name }}-v${{ steps.chart_meta.outputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Release v${{ steps.chart_version.outputs.version }} already exists"
+            echo "Release $TAG already exists"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Release v${{ steps.chart_version.outputs.version }} does not exist"
+            echo "Release $TAG does not exist"
           fi
 
       - name: Package Helm chart
         if: steps.check_release.outputs.exists == 'false'
         run: |
           mkdir -p .cr-release-packages
-          helm package charts/cron-job -d .cr-release-packages
+          helm package charts/${{ matrix.chart }} -d .cr-release-packages
 
       - name: Create GitHub Release
         if: steps.check_release.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.chart_version.outputs.version }}
-          name: Release v${{ steps.chart_version.outputs.version }}
+          tag_name: ${{ steps.chart_meta.outputs.name }}-v${{ steps.chart_meta.outputs.version }}
+          name: ${{ steps.chart_meta.outputs.name }} v${{ steps.chart_meta.outputs.version }}
           body: |
             ## Helm Chart Release
 
-            ### cron-job chart v${{ steps.chart_version.outputs.version }}
+            ### ${{ steps.chart_meta.outputs.name }} v${{ steps.chart_meta.outputs.version }}
 
             **Installation from Git:**
             ```bash
-            helm install my-cronjob https://github.com/${{ github.repository }}/releases/download/v${{ steps.chart_version.outputs.version }}/cron-job-${{ steps.chart_version.outputs.version }}.tgz
+            helm install my-release https://github.com/${{ github.repository }}/releases/download/${{ steps.chart_meta.outputs.name }}-v${{ steps.chart_meta.outputs.version }}/${{ steps.chart_meta.outputs.name }}-${{ steps.chart_meta.outputs.version }}.tgz
             ```
 
             **ArgoCD Application:**
@@ -75,7 +106,7 @@ jobs:
             source:
               repoURL: https://github.com/${{ github.repository }}.git
               targetRevision: HEAD
-              path: charts/cron-job
+              path: charts/${{ matrix.chart }}
             ```
 
             **Changes:**

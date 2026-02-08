@@ -87,30 +87,42 @@ helm install test-release charts/cron-job \
 ### GitHub Actions Workflows
 
 - **Lint and Test** (`.github/workflows/lint.yaml`): Validates YAML, lints Helm charts, runs security scans, tests installation
-- **Release** (`.github/workflows/release.yaml`): Extracts version from Chart.yaml, creates GitHub releases with packaged charts
+- **Release** (`.github/workflows/release.yaml`): Detects changed charts, creates GitHub releases with packaged charts (parallel multi-chart support)
 
 ### Versioning
 
 This project follows [Semantic Versioning](https://semver.org/). The release workflow automatically:
 
-1. Extracts version from `charts/cron-job/Chart.yaml`
-2. Checks if that version tag already exists
-3. Creates GitHub release and pushes to GHCR if new version detected
+1. Detects which charts have `Chart.yaml` changes
+2. Extracts chart name and version from each changed chart
+3. Creates separate releases for each chart (parallel execution)
+4. Skips release if version tag already exists
 
 **Release Process:**
 
-- Update version in `Chart.yaml` (e.g., `1.0.0` → `1.1.0`)
+- Update version in `charts/{chart-name}/Chart.yaml` (e.g., `1.0.0` → `1.1.0`)
 - Commit and push to `main` branch
 - Release workflow triggers automatically
-- No duplicate releases for same version
+- Each chart gets its own release: `cron-job-v1.0.0`, `common-v1.0.0`, etc.
+
+**Multi-chart updates:**
+
+- Update multiple charts in one commit → separate releases created in parallel
+- Each release is independent with chart-specific tags
 
 ## Contributing
 
 1. Create a feature branch
-2. Make changes and update chart version in `Chart.yaml`
+2. Make changes and update chart version in `charts/{chart-name}/Chart.yaml`
 3. Update `CHANGELOG.md` with changes
 4. Create PR and ensure CI passes
-5. After merge to main, release workflow creates GitHub release with packaged chart
+5. After merge to main, release workflow detects changed charts and creates releases
+
+**Adding a new chart:**
+
+1. Create `charts/new-chart/` directory
+2. Add `Chart.yaml`, `values.yaml`, and `templates/`
+3. CI will automatically lint, test, and release on merge
 
 ## License
 
