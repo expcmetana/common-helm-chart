@@ -29,34 +29,44 @@ data:
     export AWS_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID}"
     export AWS_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY}"
     export AWS_DEFAULT_REGION="${S3_REGION}"
-    export HOME=/tmp
+    export AWS_CONFIG_FILE="/tmp/.aws-config"
+
+    mkdir -p /tmp
+    cat > /tmp/.aws-config <<'AWSEOF'
+    [default]
+    s3 =
+      signature_version = s3v4
+    AWSEOF
 
     mkdir -p "${WORK_DIR}"
     TOTAL_OBJECTS=0
 
     for FOLDER in ${BACKUP_FOLDERS}; do
-      echo "→ Downloading: ${FOLDER}"
+      echo "→ Checking: s3://${S3_BUCKET}/${FOLDER}/"
 
-      OBJECT_COUNT=$(aws s3 ls "s3://${S3_BUCKET}/${FOLDER}/" \
+      LISTING=$(aws s3 ls "s3://${S3_BUCKET}/${FOLDER}/" \
         --endpoint-url="${S3_ENDPOINT}" \
-        --recursive 2>/dev/null | wc -l || echo "0")
-      OBJECT_COUNT=$(echo "${OBJECT_COUNT}" | tr -d '[:space:]')
+        --recursive 2>&1)
+
+      OBJECT_COUNT=$(echo "${LISTING}" | grep -v "^$" | wc -l | tr -d '[:space:]')
 
       if [ "${OBJECT_COUNT}" -eq "0" ]; then
-        echo "  Skip: empty or not found"
+        echo "  ⚠ Empty or not found"
+        echo "  Debug: ${LISTING}"
         continue
       fi
 
-      echo "  Found: ${OBJECT_COUNT} objects"
+      echo "  ✓ Found ${OBJECT_COUNT} objects"
       mkdir -p "${WORK_DIR}/${FOLDER}"
 
+      echo "  Downloading files..."
       aws s3 sync "s3://${S3_BUCKET}/${FOLDER}/" "${WORK_DIR}/${FOLDER}/" \
-        --endpoint-url="${S3_ENDPOINT}" \
-        --no-progress \
-        --only-show-errors
+        --endpoint-url="${S3_ENDPOINT}"
 
-      TOTAL_OBJECTS=$((TOTAL_OBJECTS + OBJECT_COUNT))
-      echo "  ✓ Downloaded"
+      DOWNLOADED=$(find "${WORK_DIR}/${FOLDER}" -type f | wc -l | tr -d '[:space:]')
+      echo "  ✓ Downloaded ${DOWNLOADED} files"
+
+      TOTAL_OBJECTS=$((TOTAL_OBJECTS + DOWNLOADED))
     done
 
     if [ "${TOTAL_OBJECTS}" -eq "0" ]; then
