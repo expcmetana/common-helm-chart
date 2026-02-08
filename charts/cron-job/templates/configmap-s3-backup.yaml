@@ -12,7 +12,8 @@ data:
 
     TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
     ARCHIVE_NAME="${BACKUP_PREFIX}-${TIMESTAMP}.tar.gz"
-    LOCAL_ARCHIVE="/tmp/${ARCHIVE_NAME}"
+    ARCHIVE_FILENAME="$(basename "${ARCHIVE_NAME}")"
+    LOCAL_ARCHIVE="/tmp/${ARCHIVE_FILENAME}"
     WORK_DIR="/tmp/backup"
 
     echo "=========================================="
@@ -28,14 +29,7 @@ data:
     export AWS_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID}"
     export AWS_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY}"
     export AWS_DEFAULT_REGION="${S3_REGION}"
-    export AWS_CONFIG_FILE="/tmp/.aws-config"
-
-    mkdir -p /tmp/.aws
-    cat > /tmp/.aws-config <<EOF
-[default]
-s3 =
-  signature_version = s3v4
-EOF
+    export HOME=/tmp
 
     mkdir -p "${WORK_DIR}"
     TOTAL_OBJECTS=0
@@ -46,6 +40,7 @@ EOF
       OBJECT_COUNT=$(aws s3 ls "s3://${S3_BUCKET}/${FOLDER}/" \
         --endpoint-url="${S3_ENDPOINT}" \
         --recursive 2>/dev/null | wc -l || echo "0")
+      OBJECT_COUNT=$(echo "${OBJECT_COUNT}" | tr -d '[:space:]')
 
       if [ "${OBJECT_COUNT}" -eq "0" ]; then
         echo "  Skip: empty or not found"
@@ -70,10 +65,10 @@ EOF
     fi
 
     echo ""
-    echo "→ Creating archive: ${ARCHIVE_NAME}"
-    tar -czf "${LOCAL_ARCHIVE}" -C "${WORK_DIR}" . 2>/dev/null
+    echo "→ Creating archive: ${ARCHIVE_FILENAME}"
+    tar -czf "${LOCAL_ARCHIVE}" -C "${WORK_DIR}" .
 
-    ARCHIVE_SIZE=$(du -h "${LOCAL_ARCHIVE}" | cut -f1)
+    ARCHIVE_SIZE=$(du -h "${LOCAL_ARCHIVE}" 2>/dev/null | cut -f1)
     echo "  Archive size: ${ARCHIVE_SIZE}"
 
     echo "→ Uploading to S3"
@@ -95,19 +90,28 @@ EOF
                      date -v-${BACKUP_RETENTION_DAYS}d +%Y-%m-%d 2>/dev/null)
     RETENTION_TIMESTAMP="${RETENTION_DATE}_00-00-00"
 
-    BACKUP_FILES=$(aws s3 ls "s3://${S3_BUCKET}/" \
+    BACKUP_PREFIX_BASENAME=$(basename "${BACKUP_PREFIX}")
+    BACKUP_PREFIX_DIR=$(dirname "${BACKUP_PREFIX}")
+
+    if [ "${BACKUP_PREFIX_DIR}" = "." ]; then
+      S3_LIST_PREFIX=""
+    else
+      S3_LIST_PREFIX="${BACKUP_PREFIX_DIR}/"
+    fi
+
+    BACKUP_FILES=$(aws s3 ls "s3://${S3_BUCKET}/${S3_LIST_PREFIX}" \
       --endpoint-url="${S3_ENDPOINT}" 2>/dev/null | \
-      grep "${BACKUP_PREFIX}-" | awk '{print $4}' || echo "")
+      grep "${BACKUP_PREFIX_BASENAME}-" | awk '{print $4}' || echo "")
 
     if [ -z "${BACKUP_FILES}" ]; then
       echo "No old backups found"
     else
       DELETED=0
       for FILE in ${BACKUP_FILES}; do
-        FILE_TIMESTAMP=$(echo "${FILE}" | sed "s/${BACKUP_PREFIX}-//;s/.tar.gz//")
+        FILE_TIMESTAMP=$(echo "${FILE}" | sed "s/${BACKUP_PREFIX_BASENAME}-//;s/.tar.gz//")
         if [[ "${FILE_TIMESTAMP}" < "${RETENTION_TIMESTAMP}" ]]; then
-          echo "Delete: ${FILE}"
-          aws s3 rm "s3://${S3_BUCKET}/${FILE}" \
+          echo "Delete: ${S3_LIST_PREFIX}${FILE}"
+          aws s3 rm "s3://${S3_BUCKET}/${S3_LIST_PREFIX}${FILE}" \
             --endpoint-url="${S3_ENDPOINT}" \
             --only-show-errors
           DELETED=$((DELETED + 1))

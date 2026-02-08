@@ -101,6 +101,8 @@ spec:
               - name: s3-backup-script
                 mountPath: /scripts
                 readOnly: true
+              - name: s3-backup-tmp
+                mountPath: /tmp
               {{- end }}
             {{- else }}
               {{- if or .Values.configMap.enabled .Values.secret.enabled .Values.s3Backup.enabled }}
@@ -119,6 +121,8 @@ spec:
               - name: s3-backup-script
                 mountPath: /scripts
                 readOnly: true
+              - name: s3-backup-tmp
+                mountPath: /tmp
               {{- end }}
               {{- end }}
             {{- end }}
@@ -140,6 +144,9 @@ spec:
               configMap:
                 name: {{ include "cron-job.fullname" $ }}-s3-backup-script
                 defaultMode: 0555
+            - name: s3-backup-tmp
+              emptyDir:
+                sizeLimit: 10Gi
             {{- end }}
           {{- else }}
             {{- if or .Values.configMap.enabled .Values.secret.enabled .Values.s3Backup.enabled }}
@@ -159,6 +166,9 @@ spec:
               configMap:
                 name: {{ include "cron-job.fullname" . }}-s3-backup-script
                 defaultMode: 0555
+            - name: s3-backup-tmp
+              emptyDir:
+                sizeLimit: 10Gi
             {{- end }}
             {{- end }}
           {{- end }}

@@ -16,7 +16,7 @@ Production-grade Kubernetes CronJob Helm chart with security hardening and best 
 ### From Git Repository
 
 ```bash
-helm install my-cronjob oci://ghcr.io/your-org/common-helm-chart/cron-job --version 1.2.0
+helm install my-cronjob oci://ghcr.io/your-org/common-helm-chart/cron-job --version 1.2.3
 ```
 
 ### From Local Path
