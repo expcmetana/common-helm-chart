@@ -25,10 +25,17 @@ data:
     echo "Retention: ${BACKUP_RETENTION_DAYS} days"
     echo ""
 
-    aws configure set aws_access_key_id "${S3_ACCESS_KEY_ID}"
-    aws configure set aws_secret_access_key "${S3_SECRET_ACCESS_KEY}"
-    aws configure set default.region "${S3_REGION}"
-    aws configure set default.s3.signature_version s3v4
+    export AWS_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID}"
+    export AWS_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY}"
+    export AWS_DEFAULT_REGION="${S3_REGION}"
+    export AWS_CONFIG_FILE="/tmp/.aws-config"
+
+    mkdir -p /tmp/.aws
+    cat > /tmp/.aws-config <<EOF
+[default]
+s3 =
+  signature_version = s3v4
+EOF
 
     mkdir -p "${WORK_DIR}"
     TOTAL_OBJECTS=0
