@@ -1,6 +1,9 @@
 ---
 extends: default
 
+ignore: |
+  charts/*/templates/
+
 rules:
   line-length:
     max: 120
@@ -15,3 +18,9 @@ rules:
     allowed-values: ["true", "false"]
     check-keys: false
   comments-indentation: disable
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
