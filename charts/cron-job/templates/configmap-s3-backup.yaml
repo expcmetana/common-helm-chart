@@ -26,17 +26,35 @@ data:
     echo "Retention: ${BACKUP_RETENTION_DAYS} days"
     echo ""
 
+    echo "Validating environment..."
+    if [ -z "${S3_ACCESS_KEY_ID}" ] || [ -z "${S3_SECRET_ACCESS_KEY}" ]; then
+      echo "ERROR: S3 credentials not set"
+      exit 1
+    fi
+    echo "  ✓ Credentials present"
+
+    if ! command -v aws &> /dev/null; then
+      echo "ERROR: AWS CLI not installed"
+      exit 1
+    fi
+    echo "  ✓ AWS CLI found: $(aws --version 2>&1 | head -n1)"
+    echo ""
+
     export AWS_ACCESS_KEY_ID="${S3_ACCESS_KEY_ID}"
     export AWS_SECRET_ACCESS_KEY="${S3_SECRET_ACCESS_KEY}"
     export AWS_DEFAULT_REGION="${S3_REGION}"
-    export AWS_CONFIG_FILE="/tmp/.aws-config"
+    export HOME=/tmp
 
-    mkdir -p /tmp
-    cat > /tmp/.aws-config <<'AWSEOF'
-    [default]
-    s3 =
-      signature_version = s3v4
-    AWSEOF
+    echo "Testing S3 connection..."
+    if ! aws s3 ls "s3://${S3_BUCKET}/" --endpoint-url="${S3_ENDPOINT}" >/dev/null 2>&1; then
+      echo "ERROR: Cannot connect to S3 bucket"
+      echo "Bucket: ${S3_BUCKET}"
+      echo "Endpoint: ${S3_ENDPOINT}"
+      aws s3 ls "s3://${S3_BUCKET}/" --endpoint-url="${S3_ENDPOINT}" 2>&1
+      exit 1
+    fi
+    echo "  ✓ S3 connection successful"
+    echo ""
 
     mkdir -p "${WORK_DIR}"
     TOTAL_OBJECTS=0
