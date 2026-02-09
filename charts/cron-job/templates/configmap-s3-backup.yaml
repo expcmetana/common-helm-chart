@@ -62,36 +62,30 @@ data:
     for FOLDER in ${BACKUP_FOLDERS}; do
       echo "→ Checking: s3://${S3_BUCKET}/${FOLDER}/"
 
-      # Try to list folder (redirect stderr to capture errors)
-      LISTING=$(aws s3 ls "s3://${S3_BUCKET}/${FOLDER}/" \
-        --endpoint-url="${S3_ENDPOINT}" \
-        --recursive 2>&1 | head -100)
-
-      # Check if command failed (NoSuchKey, AccessDenied, etc)
-      if echo "${LISTING}" | grep -qE "(NoSuchKey|NoSuchBucket|does not exist)"; then
-        echo "  ⚠️  Folder does not exist, skipping"
+      # Test if folder exists (quick check without recursive listing)
+      if ! aws s3 ls "s3://${S3_BUCKET}/${FOLDER}/" \
+           --endpoint-url="${S3_ENDPOINT}" >/dev/null 2>&1; then
+        echo "  ⚠️  Folder does not exist or is empty, skipping"
         continue
       fi
 
-      # Count non-empty lines
-      OBJECT_COUNT=$(echo "${LISTING}" | grep -v "^$" | wc -l | tr -d '[:space:]')
-
-      if [ "${OBJECT_COUNT}" -eq "0" ]; then
-        echo "  ⚠️  Folder is empty, skipping"
-        continue
-      fi
-
-      echo "  ✓ Found objects in folder"
+      echo "  ✓ Folder exists, downloading..."
       mkdir -p "${WORK_DIR}/${FOLDER}"
 
-      echo "  Downloading files..."
       aws s3 sync "s3://${S3_BUCKET}/${FOLDER}/" "${WORK_DIR}/${FOLDER}/" \
         --endpoint-url="${S3_ENDPOINT}" \
-        --no-progress
+        --no-progress \
+        --only-show-errors
 
       DOWNLOADED=$(find "${WORK_DIR}/${FOLDER}" -type f 2>/dev/null | wc -l | tr -d '[:space:]')
-      echo "  ✓ Downloaded ${DOWNLOADED} files"
 
+      if [ "${DOWNLOADED}" -eq "0" ]; then
+        echo "  ⚠️  No files downloaded, skipping"
+        rm -rf "${WORK_DIR}/${FOLDER}"
+        continue
+      fi
+
+      echo "  ✓ Downloaded ${DOWNLOADED} files"
       TOTAL_OBJECTS=$((TOTAL_OBJECTS + DOWNLOADED))
     done
 
