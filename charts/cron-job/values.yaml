@@ -114,5 +114,7 @@ secret:
 
 # S3 Backup built-in script
 # Automatically creates ConfigMap with backup script and mounts it
+# When enabled, use image: registry.digitalocean.com/izi-x/s3-backup:<chart-version>
+# Image versions match chart versions for compatibility
 s3Backup:
   enabled: false
