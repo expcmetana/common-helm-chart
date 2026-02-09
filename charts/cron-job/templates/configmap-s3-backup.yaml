@@ -26,6 +26,19 @@ data:
     echo "Retention: ${BACKUP_RETENTION_DAYS} days"
     echo ""
 
+    echo "Installing dependencies..."
+    if ! yum install -y tar gzip >/dev/null 2>&1; then
+      echo "ERROR: Failed to install tar/gzip"
+      exit 1
+    fi
+
+    if ! command -v tar &> /dev/null || ! command -v gzip &> /dev/null; then
+      echo "ERROR: tar or gzip not found after installation"
+      exit 1
+    fi
+    echo "  ✓ tar and gzip installed"
+    echo ""
+
     echo "Validating environment..."
     if [ -z "${S3_ACCESS_KEY_ID}" ] || [ -z "${S3_SECRET_ACCESS_KEY}" ]; then
       echo "ERROR: S3 credentials not set"
