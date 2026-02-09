@@ -62,15 +62,21 @@ data:
     for FOLDER in ${BACKUP_FOLDERS}; do
       echo "→ Checking: s3://${S3_BUCKET}/${FOLDER}/"
 
-      LISTING=$(aws s3 ls "s3://${S3_BUCKET}/${FOLDER}/" \
-        --endpoint-url="${S3_ENDPOINT}" \
-        --recursive 2>&1)
+      # Check if folder exists by trying to list first page
+      if ! aws s3 ls "s3://${S3_BUCKET}/${FOLDER}/" \
+           --endpoint-url="${S3_ENDPOINT}" \
+           --max-items 1 >/dev/null 2>&1; then
+        echo "  ⚠️  Folder does not exist, skipping"
+        continue
+      fi
 
-      OBJECT_COUNT=$(echo "${LISTING}" | grep -v "^$" | wc -l | tr -d '[:space:]')
+      # Count objects in folder
+      OBJECT_COUNT=$(aws s3 ls "s3://${S3_BUCKET}/${FOLDER}/" \
+        --endpoint-url="${S3_ENDPOINT}" \
+        --recursive | wc -l | tr -d '[:space:]')
 
       if [ "${OBJECT_COUNT}" -eq "0" ]; then
-        echo "  ⚠ Empty or not found"
-        echo "  Debug: ${LISTING}"
+        echo "  ⚠️  Folder is empty, skipping"
         continue
       fi
 
@@ -79,9 +85,10 @@ data:
 
       echo "  Downloading files..."
       aws s3 sync "s3://${S3_BUCKET}/${FOLDER}/" "${WORK_DIR}/${FOLDER}/" \
-        --endpoint-url="${S3_ENDPOINT}"
+        --endpoint-url="${S3_ENDPOINT}" \
+        --no-progress
 
-      DOWNLOADED=$(find "${WORK_DIR}/${FOLDER}" -type f | wc -l | tr -d '[:space:]')
+      DOWNLOADED=$(find "${WORK_DIR}/${FOLDER}" -type f 2>/dev/null | wc -l | tr -d '[:space:]')
       echo "  ✓ Downloaded ${DOWNLOADED} files"
 
       TOTAL_OBJECTS=$((TOTAL_OBJECTS + DOWNLOADED))
