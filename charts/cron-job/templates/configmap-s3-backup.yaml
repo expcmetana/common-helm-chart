@@ -62,25 +62,26 @@ data:
     for FOLDER in ${BACKUP_FOLDERS}; do
       echo "→ Checking: s3://${S3_BUCKET}/${FOLDER}/"
 
-      # Check if folder exists by trying to list first page
-      if ! aws s3 ls "s3://${S3_BUCKET}/${FOLDER}/" \
-           --endpoint-url="${S3_ENDPOINT}" \
-           --max-items 1 >/dev/null 2>&1; then
+      # Try to list folder (redirect stderr to capture errors)
+      LISTING=$(aws s3 ls "s3://${S3_BUCKET}/${FOLDER}/" \
+        --endpoint-url="${S3_ENDPOINT}" \
+        --recursive 2>&1 | head -100)
+
+      # Check if command failed (NoSuchKey, AccessDenied, etc)
+      if echo "${LISTING}" | grep -qE "(NoSuchKey|NoSuchBucket|does not exist)"; then
         echo "  ⚠️  Folder does not exist, skipping"
         continue
       fi
 
-      # Count objects in folder
-      OBJECT_COUNT=$(aws s3 ls "s3://${S3_BUCKET}/${FOLDER}/" \
-        --endpoint-url="${S3_ENDPOINT}" \
-        --recursive | wc -l | tr -d '[:space:]')
+      # Count non-empty lines
+      OBJECT_COUNT=$(echo "${LISTING}" | grep -v "^$" | wc -l | tr -d '[:space:]')
 
       if [ "${OBJECT_COUNT}" -eq "0" ]; then
         echo "  ⚠️  Folder is empty, skipping"
         continue
       fi
 
-      echo "  ✓ Found ${OBJECT_COUNT} objects"
+      echo "  ✓ Found objects in folder"
       mkdir -p "${WORK_DIR}/${FOLDER}"
 
       echo "  Downloading files..."
