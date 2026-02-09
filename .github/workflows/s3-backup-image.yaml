@@ -50,12 +50,10 @@ jobs:
       - name: Compute docker tags
         id: tags
         run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
-          AWS_VERSION="${{ steps.version.outputs.aws_version }}"
           CHART_VERSION="${{ steps.version.outputs.chart_version }}"
-          TAGS="${{ env.IMAGE_NAME }}:${CHART_VERSION},${{ env.IMAGE_NAME }}:latest,${{ env.IMAGE_NAME }}:aws-${AWS_VERSION},${{ env.IMAGE_NAME }}:sha-${SHORT_SHA}"
+          TAGS="${{ env.IMAGE_NAME }}:${CHART_VERSION}"
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
-          echo "Docker tags: ${TAGS}"
+          echo "Docker tag: ${TAGS}"
 
       - name: Build (PR)
         if: github.event_name == 'pull_request'
